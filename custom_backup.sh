@@ -1,18 +1,21 @@
 #!/bin/bash
 
 # --- Start of user-configurable settings ---
-# Default backup paths (can be overridden by user input or existing config)
-DEFAULT_BACKUP_PATHS=("/var/www/html" "/etc/nginx")
+# Default backup paths - these will NOT be used directly anymore for initial setup
+# The script will always prompt the user for paths.
+# DEFAULT_BACKUP_PATHS is commented out to force user input.
+# DEFAULT_BACKUP_PATHS=("/var/www/html" "/etc/nginx")
 
 # Default backup interval in hours (e.g., 7 for every 7 hours)
+# This will still be a default suggestion, but user will be prompted.
 DEFAULT_BACKUP_INTERVAL_HOURS=7
 
 # Telegram Bot Token (obtain from BotFather)
-# Example: TELEGRAM_BOT_TOKEN="1234567890:ABCDEFGHIJKLMN_OPQRSTUVWXYZABCDEF"
+# Set to empty to force user input every time for initial setup
 TELEGRAM_BOT_TOKEN=""
 
 # Telegram Chat ID (the chat where you want to receive backups)
-# Example: TELEGRAM_CHAT_ID="-1234567890123"
+# Set to empty to force user input every time for initial setup
 TELEGRAM_CHAT_ID=""
 # --- End of user-configurable settings ---
 
@@ -90,19 +93,21 @@ send_telegram_message() {
     fi
 }
 
+# The load_config function will only be used by perform_backup to load saved settings
+# It's explicitly NOT called during the initial configure_script phase to force user input.
 load_config() {
     if [ -f "$CONFIG_FILE" ]; then
-        log_message "Loading configuration from $CONFIG_FILE..."
+        log_message "Loading configuration from $CONFIG_FILE for backup process..."
         # Source the config file to load variables
         . "$CONFIG_FILE"
-        # Ensure variables are set, if not, fallback to defaults or prompt
-        : "${BACKUP_PATHS:=$(printf "%s\n" "${DEFAULT_BACKUP_PATHS[@]}")}"
-        : "${BACKUP_INTERVAL_HOURS:=$DEFAULT_BACKUP_INTERVAL_HOURS}"
-        : "${TELEGRAM_BOT_TOKEN:=$TELEGRAM_BOT_TOKEN}" # Use initial value if not in config
-        : "${TELEGRAM_CHAT_ID:=$TELEGRAM_CHAT_ID}"   # Use initial value if not in config
-        log_message "Configuration loaded."
+        # Ensure variables are set, if not, fallback to empty to trigger error
+        : "${BACKUP_PATHS:=}"
+        : "${BACKUP_INTERVAL_HOURS:=0}" # 0 or empty will indicate a problem
+        : "${TELEGRAM_BOT_TOKEN:=}"
+        : "${TELEGRAM_CHAT_ID:=}"
+        log_message "Configuration loaded for backup."
     else
-        log_message "No existing configuration found. Will prompt for settings or use defaults."
+        log_message "No existing configuration found. Backup cannot proceed without configuration."
     fi
 }
 
@@ -118,26 +123,13 @@ save_config() {
 }
 
 configure_script() {
-    log_message "Starting script configuration..."
+    log_message "Starting script configuration (all settings will be prompted)..."
 
-    # Load existing config or use defaults
-    load_config
+    # Always prompt for Telegram Bot Token
+    read -rp "Enter your Telegram Bot Token: " TELEGRAM_BOT_TOKEN
 
-    # Prompt for Telegram Bot Token if not set or empty
-    if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-        read -rp "Enter your Telegram Bot Token: " TELEGRAM_BOT_TOKEN
-    else
-        read -rp "Current Telegram Bot Token is set. Enter new token or press Enter to keep current: " input_token
-        [ -n "$input_token" ] && TELEGRAM_BOT_TOKEN="$input_token"
-    fi
-
-    # Prompt for Telegram Chat ID if not set or empty
-    if [ -z "$TELEGRAM_CHAT_ID" ]; then
-        read -rp "Enter your Telegram Chat ID: " TELEGRAM_CHAT_ID
-    else
-        read -rp "Current Telegram Chat ID is set. Enter new ID or press Enter to keep current: " input_chat_id
-        [ -n "$input_chat_id" ] && TELEGRAM_CHAT_ID="$input_chat_id"
-    fi
+    # Always prompt for Telegram Chat ID
+    read -rp "Enter your Telegram Chat ID: " TELEGRAM_CHAT_ID
 
     # Validate Telegram settings
     if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
@@ -145,40 +137,30 @@ configure_script() {
         exit 1
     fi
 
-    # Prompt for backup paths
-    local current_paths_display
-    if [ -n "${BACKUP_PATHS[*]}" ]; then
-        current_paths_display="Current backup paths: ${BACKUP_PATHS[*]}"
-    else
-        current_paths_display="No backup paths set. Using defaults: ${DEFAULT_BACKUP_PATHS[*]}"
-        BACKUP_PATHS=("${DEFAULT_BACKUP_PATHS[@]}") # Set to defaults if not already set
-    fi
-    log_message "$current_paths_display"
-    read -rp "Do you want to enter new backup paths? (yes/no, default: no): " input_new_paths
-    input_new_paths=${input_new_paths,,} # Convert to lowercase
-
-    if [[ "$input_new_paths" == "yes" || "$input_new_paths" == "y" ]]; then
-        BACKUP_PATHS=() # Clear existing paths
-        log_message "Enter paths to backup (one per line). Type 'done' to finish:"
-        while IFS= read -rp "> " path_input; do
-            if [[ "$path_input" == "done" ]]; then
-                break
-            elif [ -d "$path_input" ] || [ -f "$path_input" ]; then
-                BACKUP_PATHS+=("$path_input")
-            else
-                log_message "Warning: Path '$path_input' does not exist or is not a file/directory. Skipping."
-            fi
-        done
-        if [ ${#BACKUP_PATHS[@]} -eq 0 ]; then
-            log_message "No valid backup paths entered. Using default paths: ${DEFAULT_BACKUP_PATHS[*]}"
-            BACKUP_PATHS=("${DEFAULT_BACKUP_PATHS[@]}")
+    # Always prompt for backup paths
+    BACKUP_PATHS=() # Clear any existing paths for fresh input
+    log_message "Enter paths to backup (one per line). Type 'done' to finish:"
+    while IFS= read -rp "> " path_input; do
+        if [[ "$path_input" == "done" ]]; then
+            break
+        elif [ -d "$path_input" ] || [ -f "$path_input" ]; then
+            BACKUP_PATHS+=("$path_input")
+        else
+            log_message "Warning: Path '$path_input' does not exist or is not a file/directory. Skipping."
         fi
+    done
+    if [ ${#BACKUP_PATHS[@]} -eq 0 ]; then
+        log_message "Error: No valid backup paths entered. Script cannot proceed without paths."
+        exit 1
     fi
 
     # Prompt for backup interval
-    read -rp "Current backup interval: $BACKUP_INTERVAL_HOURS hours. Enter new interval (in hours, default: $DEFAULT_BACKUP_INTERVAL_HOURS): " input_interval
+    read -rp "Enter backup interval (in hours, e.g., 7 for every 7 hours. Default: $DEFAULT_BACKUP_INTERVAL_HOURS): " input_interval
     if [[ -n "$input_interval" && "$input_interval" =~ ^[0-9]+$ && "$input_interval" -gt 0 ]]; then
         BACKUP_INTERVAL_HOURS="$input_interval"
+    else
+        log_message "Invalid or empty interval. Using default: $DEFAULT_BACKUP_INTERVAL_HOURS hours."
+        BACKUP_INTERVAL_HOURS="$DEFAULT_BACKUP_INTERVAL_HOURS"
     fi
 
     save_config
@@ -207,17 +189,17 @@ setup_cron_job() {
 
 perform_backup() {
     log_message "Starting backup process..."
-    load_config # Ensure latest config is loaded
+    load_config # Ensure latest config is loaded from file for actual backup runs
 
     if [ ${#BACKUP_PATHS[@]} -eq 0 ]; then
-        log_message "Error: No backup paths defined. Please configure the script first."
-        send_telegram_message "Custom Backup Script: Error - No backup paths defined. Please run the script to configure it."
+        log_message "Error: No backup paths defined in config file. Please configure the script first."
+        send_telegram_message "Custom Backup Script: Error - No backup paths defined in config. Please run the script to configure it."
         exit 1
     fi
 
     if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-        log_message "Error: Telegram BOT_TOKEN or CHAT_ID is not set. Cannot send backups."
-        send_telegram_message "Custom Backup Script: Error - Telegram settings are missing. Cannot send backups. Please configure the script."
+        log_message "Error: Telegram BOT_TOKEN or CHAT_ID is not set in config file. Cannot send backups."
+        send_telegram_message "Custom Backup Script: Error - Telegram settings are missing in config. Cannot send backups. Please configure the script."
         exit 1
     fi
 
@@ -276,7 +258,7 @@ else
 fi
 
 check_dependencies
-configure_script
+configure_script # This will now always prompt for all settings
 setup_cron_job
 
 log_message "Custom backup script setup complete!"
