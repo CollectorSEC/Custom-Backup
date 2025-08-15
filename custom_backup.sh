@@ -1,21 +1,12 @@
 #!/bin/bash
 
-# --- Start of user-configurable settings ---
-# Default backup paths - these will NOT be used directly anymore for initial setup
-# The script will always prompt the user for paths.
-# DEFAULT_BACKUP_PATHS is commented out to force user input.
-# DEFAULT_BACKUP_PATHS=("/var/www/html" "/etc/nginx")
-
+# --- Start of user-configurable settings (default values, but user will be prompted) ---
 # Default backup interval in hours (e.g., 7 for every 7 hours)
-# This will still be a default suggestion, but user will be prompted.
 DEFAULT_BACKUP_INTERVAL_HOURS=7
 
-# Telegram Bot Token (obtain from BotFather)
-# Set to empty to force user input every time for initial setup
+# Telegram Bot Token and Chat ID are intentionally left empty here,
+# as the script will always prompt the user for them during configuration.
 TELEGRAM_BOT_TOKEN=""
-
-# Telegram Chat ID (the chat where you want to receive backups)
-# Set to empty to force user input every time for initial setup
 TELEGRAM_CHAT_ID=""
 # --- End of user-configurable settings ---
 
@@ -23,7 +14,7 @@ SCRIPT_DIR="/usr/local/bin" # Or any preferred location for the script
 SCRIPT_NAME="custom_backup.sh"
 SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_NAME"
 CONFIG_FILE="$HOME/.backup_config"
-LOG_FILE="$HOME/.backup_log" # Added a log file for better debugging and tracking
+LOG_FILE="$HOME/.backup_log"
 
 # --- Utility Functions ---
 
@@ -93,21 +84,20 @@ send_telegram_message() {
     fi
 }
 
-# The load_config function will only be used by perform_backup to load saved settings
-# It's explicitly NOT called during the initial configure_script phase to force user input.
+# load_config is only for when the script is run by cron for actual backups,
+# not for initial setup where we force user input.
 load_config() {
     if [ -f "$CONFIG_FILE" ]; then
         log_message "Loading configuration from $CONFIG_FILE for backup process..."
-        # Source the config file to load variables
         . "$CONFIG_FILE"
-        # Ensure variables are set, if not, fallback to empty to trigger error
         : "${BACKUP_PATHS:=}"
-        : "${BACKUP_INTERVAL_HOURS:=0}" # 0 or empty will indicate a problem
+        : "${BACKUP_INTERVAL_HOURS:=0}"
         : "${TELEGRAM_BOT_TOKEN:=}"
         : "${TELEGRAM_CHAT_ID:=}"
         log_message "Configuration loaded for backup."
     else
         log_message "No existing configuration found. Backup cannot proceed without configuration."
+        return 1 # Indicate that config loading failed
     fi
 }
 
@@ -127,15 +117,17 @@ configure_script() {
 
     # Always prompt for Telegram Bot Token
     read -rp "Enter your Telegram Bot Token: " TELEGRAM_BOT_TOKEN
+    while [ -z "$TELEGRAM_BOT_TOKEN" ]; do
+        log_message "Telegram Bot Token cannot be empty. Please enter a valid token."
+        read -rp "Enter your Telegram Bot Token: " TELEGRAM_BOT_TOKEN
+    done
 
     # Always prompt for Telegram Chat ID
     read -rp "Enter your Telegram Chat ID: " TELEGRAM_CHAT_ID
-
-    # Validate Telegram settings
-    if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-        log_message "Error: Telegram Bot Token and Chat ID are required. Aborting configuration."
-        exit 1
-    fi
+    while [ -z "$TELEGRAM_CHAT_ID" ]; do
+        log_message "Telegram Chat ID cannot be empty. Please enter a valid ID."
+        read -rp "Enter your Telegram Chat ID: " TELEGRAM_CHAT_ID
+    done
 
     # Always prompt for backup paths
     BACKUP_PATHS=() # Clear any existing paths for fresh input
@@ -189,7 +181,12 @@ setup_cron_job() {
 
 perform_backup() {
     log_message "Starting backup process..."
-    load_config # Ensure latest config is loaded from file for actual backup runs
+    # Ensure configuration is loaded for actual backup runs
+    if ! load_config; then
+        log_message "Error: Configuration could not be loaded for backup. Aborting."
+        send_telegram_message "Custom Backup Script: Error - Configuration could not be loaded. Please run the script to configure it."
+        exit 1
+    fi
 
     if [ ${#BACKUP_PATHS[@]} -eq 0 ]; then
         log_message "Error: No backup paths defined in config file. Please configure the script first."
@@ -246,7 +243,7 @@ fi
 # Initial setup and installation
 log_message "Starting custom_backup.sh setup..."
 
-# Check if script exists and is executable in the intended location
+# Ensure the script is correctly placed and executable
 if [ ! -f "$SCRIPT_PATH" ] || [ ! -x "$SCRIPT_PATH" ] || [[ "$SCRIPT_PATH" -ef "$0" ]]; then
     log_message "Setting up script in $SCRIPT_DIR..."
     sudo mkdir -p "$SCRIPT_DIR"
@@ -258,7 +255,7 @@ else
 fi
 
 check_dependencies
-configure_script # This will now always prompt for all settings
+configure_script # This will now always prompt for all settings and save them
 setup_cron_job
 
 log_message "Custom backup script setup complete!"
