@@ -2,24 +2,29 @@
 
 set -e
 
-CONFIG_FILE="/root/.backup_config"
+CONFIG_FILE="/root/backup_config.json"
 TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
 ZIP_FILE="backup_${TIMESTAMP}.zip"
 TMP_PATH="/tmp/$ZIP_FILE"
 FOLDERS_TO_BACKUP=("/root/marzbot" "/root/arvan-screenshot")
 
-# اگر فایل کانفیگ وجود نداشت، بار اول از کاربر بپرسیم و ذخیره کنیم
+# اولین اجرا: گرفتن اطلاعات و ذخیره در JSON
 if [ ! -f "$CONFIG_FILE" ]; then
     read -rp "Enter Telegram bot token: " TOKEN
     read -rp "Enter Telegram chat ID: " CHAT_ID
 
-    echo "TOKEN=$TOKEN" > "$CONFIG_FILE"
-    echo "CHAT_ID=$CHAT_ID" >> "$CONFIG_FILE"
+    cat <<EOF > "$CONFIG_FILE"
+{
+    "TOKEN": "$TOKEN",
+    "CHAT_ID": "$CHAT_ID"
+}
+EOF
     chmod 600 "$CONFIG_FILE"
     echo "Configuration saved to $CONFIG_FILE"
 else
-    # مقادیر رو از فایل بخونیم
-    source "$CONFIG_FILE"
+    # خواندن از JSON
+    TOKEN=$(grep -oP '(?<="TOKEN": ")[^"]*' "$CONFIG_FILE")
+    CHAT_ID=$(grep -oP '(?<="CHAT_ID": ")[^"]*' "$CONFIG_FILE")
 fi
 
 # نصب ابزارهای لازم
