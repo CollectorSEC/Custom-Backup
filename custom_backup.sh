@@ -47,7 +47,7 @@ check_dependencies() {
                 log_message "Error: Failed to install '$dep'. Please install it manually."
                 exit 1
             fi
-        done
+        fi
         log_message "Dependencies installed successfully."
     else
         log_message "All dependencies (zip, curl) are already installed."
