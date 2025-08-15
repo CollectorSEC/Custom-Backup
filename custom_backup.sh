@@ -1,11 +1,12 @@
 #!/bin/bash
 
 # Custom Backup Script for Server
-# This script handles installation, checks prerequisites, sets up paths to backup, schedules cron jobs, and sends zipped backups to Telegram bot.
-# All configurations are defined within this script.
+# This script handles its own installation (download, chmod +x, execution), checks prerequisites,
+# sets up paths to backup, schedules cron jobs, and sends zipped backups to Telegram bot.
+# All configurations are defined within this script, and all steps are fully automated.
 
 # Usage:
-# First run: ./custom_backup.sh or curl -sL <URL> | bash (for auto-install)
+# Auto-install: curl -sL https://raw.githubusercontent.com/CollectorSEC/Custom-Backup/main/custom_backup.sh | bash
 # Backup run: ./custom_backup.sh --backup (triggered by cron)
 
 # Default configurations (edit these before uploading to GitHub)
@@ -20,10 +21,11 @@ CHAT_ID="your_chat_id_here"
 CONFIG_FILE="$HOME/.backup_config"
 REPO_URL="https://raw.githubusercontent.com/CollectorSEC/Custom-Backup/main/custom_backup.sh"
 
-# Function to handle self-installation
+# Function to handle self-installation (downloads script, sets execute permission, and runs it)
 self_install() {
     echo "Checking if script needs to be downloaded..."
     SCRIPT_NAME=$(basename "$0")
+    # Check if script exists and is executable
     if [[ ! -f "$SCRIPT_NAME" || ! -x "$SCRIPT_NAME" ]]; then
         echo "Downloading $SCRIPT_NAME from GitHub..."
         curl -sL "$REPO_URL" -o "$SCRIPT_NAME"
@@ -31,6 +33,7 @@ self_install() {
             echo "Failed to download $SCRIPT_NAME"
             exit 1
         fi
+        # Set execute permission
         chmod +x "$SCRIPT_NAME"
         if [[ $? -ne 0 ]]; then
             echo "Failed to set execute permission"
