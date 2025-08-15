@@ -80,13 +80,16 @@ setup() {
         if [[ "$use_default" != "y" && "$use_default" != "Y" ]]; then
             # Ask for paths
             paths=()
-            echo "Enter paths to backup (one per line). Type 'done' when finished:"
+            echo "Enter path to backup (or 'done' to finish):"
             while true; do
                 read -r path
                 if [[ "$path" == "done" ]]; then
                     break
                 fi
-                paths+=("$path")
+                if [[ -n "$path" ]]; then
+                    paths+=("$path")
+                    echo "Enter next path to backup (or 'done' to finish):"
+                fi
             done
             if [[ ${#paths[@]} -gt 0 ]]; then
                 PATHS=("${paths[@]}")
