@@ -6,17 +6,11 @@ set -e
 read -rp "Enter Telegram bot token: " TOKEN
 read -rp "Enter Telegram chat ID: " CHAT_ID
 
-SOURCE_DIR="root"
+SOURCE_DIR="/root"
 TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
 ZIP_FILE="backup_${TIMESTAMP}.zip"
 
-# بررسی وجود پوشه
-if [ ! -d "$SOURCE_DIR" ]; then
-    echo "Error: Folder '$SOURCE_DIR' not found."
-    exit 1
-fi
-
-# نصب ابزار لازم
+# نصب ابزارهای لازم
 if ! command -v zip &>/dev/null; then
     echo "Installing zip..."
     apt-get update -y && apt-get install -y zip
@@ -26,7 +20,7 @@ if ! command -v curl &>/dev/null; then
     apt-get update -y && apt-get install -y curl
 fi
 
-# فشرده‌سازی
+# فشرده‌سازی فولدر /root
 echo "Zipping folder '$SOURCE_DIR'..."
 zip -r "$ZIP_FILE" "$SOURCE_DIR" >/dev/null
 
@@ -41,7 +35,7 @@ echo "Backup sent successfully."
 # حذف فایل زیپ
 rm -f "$ZIP_FILE"
 
-# اضافه کردن کرون‌جاب
+# اضافه کردن کرون جاب
 CRON_CMD="0 */7 * * * curl -sL https://raw.githubusercontent.com/CollectorSEC/Custom-Backup/main/custom_backup.sh | bash"
 (crontab -l 2>/dev/null | grep -F -v "custom_backup.sh" ; echo "$CRON_CMD") | crontab -
 
