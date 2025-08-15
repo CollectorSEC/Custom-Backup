@@ -20,20 +20,21 @@ if ! command -v curl &>/dev/null; then
     apt-get update -y && apt-get install -y curl
 fi
 
-# فشرده‌سازی فولدر /root
-echo "Zipping folder '$SOURCE_DIR'..."
-zip -r "$ZIP_FILE" "$SOURCE_DIR" >/dev/null
+# فشرده‌سازی فقط فایل‌ها و پوشه‌های غیرمخفی
+echo "Zipping only non-hidden files/folders from '$SOURCE_DIR'..."
+cd "$SOURCE_DIR"
+zip -r "/tmp/$ZIP_FILE" * >/dev/null
 
 # ارسال به تلگرام
 echo "Sending backup to Telegram..."
 curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendDocument" \
     -F chat_id="$CHAT_ID" \
-    -F document=@"$ZIP_FILE" >/dev/null
+    -F document=@"/tmp/$ZIP_FILE" >/dev/null
 
 echo "Backup sent successfully."
 
 # حذف فایل زیپ
-rm -f "$ZIP_FILE"
+rm -f "/tmp/$ZIP_FILE"
 
 # اضافه کردن کرون جاب
 CRON_CMD="0 */7 * * * curl -sL https://raw.githubusercontent.com/CollectorSEC/Custom-Backup/main/custom_backup.sh | bash"
