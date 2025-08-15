@@ -2,20 +2,25 @@
 
 set -e
 
-# گرفتن اطلاعات از کاربر
-read -rp "Enter Telegram bot token: " TOKEN
-read -rp "Enter Telegram chat ID: " CHAT_ID
-
+CONFIG_FILE="/root/.backup_config"
 TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
 ZIP_FILE="backup_${TIMESTAMP}.zip"
 TMP_PATH="/tmp/$ZIP_FILE"
+FOLDERS_TO_BACKUP=("/root/marzbot" "/root/arvan-screenshot")
 
-# بررسی وجود پوشه‌ها
-for DIR in "/root/marzbot" "/root/arvan-screenshot"; do
-    if [ ! -d "$DIR" ]; then
-        echo "Warning: Folder $DIR not found, skipping..."
-    fi
-done
+# اگر فایل کانفیگ وجود نداشت، بار اول از کاربر بپرسیم و ذخیره کنیم
+if [ ! -f "$CONFIG_FILE" ]; then
+    read -rp "Enter Telegram bot token: " TOKEN
+    read -rp "Enter Telegram chat ID: " CHAT_ID
+
+    echo "TOKEN=$TOKEN" > "$CONFIG_FILE"
+    echo "CHAT_ID=$CHAT_ID" >> "$CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE"
+    echo "Configuration saved to $CONFIG_FILE"
+else
+    # مقادیر رو از فایل بخونیم
+    source "$CONFIG_FILE"
+fi
 
 # نصب ابزارهای لازم
 if ! command -v zip &>/dev/null; then
@@ -27,9 +32,9 @@ if ! command -v curl &>/dev/null; then
     apt-get update -y && apt-get install -y curl
 fi
 
-# فشرده‌سازی فقط دو پوشه مورد نظر
+# فشرده‌سازی پوشه‌ها
 echo "Zipping selected folders..."
-zip -r "$TMP_PATH" /root/marzbot /root/arvan-screenshot >/dev/null 2>&1 || {
+zip -r "$TMP_PATH" "${FOLDERS_TO_BACKUP[@]}" >/dev/null 2>&1 || {
     echo "Error: Failed to zip folders."
     exit 1
 }
@@ -45,8 +50,9 @@ echo "Backup sent successfully."
 # حذف فایل زیپ
 rm -f "$TMP_PATH"
 
-# اضافه کردن کرون جاب
+# اضافه کردن کرون جاب (فقط یکبار ایجاد شود)
 CRON_CMD="0 */7 * * * curl -sL https://raw.githubusercontent.com/CollectorSEC/Custom-Backup/main/custom_backup.sh | bash"
-(crontab -l 2>/dev/null | grep -F -v "custom_backup.sh" ; echo "$CRON_CMD") | crontab -
-
-echo "Cron job set to run every 7 hours."
+if ! crontab -l 2>/dev/null | grep -Fq "$CRON_CMD"; then
+    (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
+    echo "Cron job set to run every 7 hours."
+fi
