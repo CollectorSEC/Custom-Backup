@@ -6,9 +6,16 @@ set -e
 read -rp "Enter Telegram bot token: " TOKEN
 read -rp "Enter Telegram chat ID: " CHAT_ID
 
-SOURCE_DIR="/root"
 TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
 ZIP_FILE="backup_${TIMESTAMP}.zip"
+TMP_PATH="/tmp/$ZIP_FILE"
+
+# بررسی وجود پوشه‌ها
+for DIR in "/root/marzbot" "/root/arvan-screenshot"; do
+    if [ ! -d "$DIR" ]; then
+        echo "Warning: Folder $DIR not found, skipping..."
+    fi
+done
 
 # نصب ابزارهای لازم
 if ! command -v zip &>/dev/null; then
@@ -20,21 +27,23 @@ if ! command -v curl &>/dev/null; then
     apt-get update -y && apt-get install -y curl
 fi
 
-# فشرده‌سازی فقط فایل‌ها و پوشه‌های غیرمخفی
-echo "Zipping only non-hidden files/folders from '$SOURCE_DIR'..."
-cd "$SOURCE_DIR"
-zip -r "/tmp/$ZIP_FILE" * >/dev/null
+# فشرده‌سازی فقط دو پوشه مورد نظر
+echo "Zipping selected folders..."
+zip -r "$TMP_PATH" /root/marzbot /root/arvan-screenshot >/dev/null 2>&1 || {
+    echo "Error: Failed to zip folders."
+    exit 1
+}
 
 # ارسال به تلگرام
 echo "Sending backup to Telegram..."
 curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendDocument" \
     -F chat_id="$CHAT_ID" \
-    -F document=@"/tmp/$ZIP_FILE" >/dev/null
+    -F document=@"$TMP_PATH" >/dev/null
 
 echo "Backup sent successfully."
 
 # حذف فایل زیپ
-rm -f "/tmp/$ZIP_FILE"
+rm -f "$TMP_PATH"
 
 # اضافه کردن کرون جاب
 CRON_CMD="0 */7 * * * curl -sL https://raw.githubusercontent.com/CollectorSEC/Custom-Backup/main/custom_backup.sh | bash"
